@@ -1,0 +1,19 @@
+[project]
+name = "Scarabaeus"
+version = "0.0.2"
+authors = [
+    { name = "Quik", email = "quik@daskju.com"}
+]
+description = "A simple way to manage plugins and events"
+readme = "README.md"
+license = { text= "MIT" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Development Status :: 3 - Alpha"
+]
