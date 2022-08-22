@@ -1,6 +1,5 @@
-import unittest
+def scarabaeus_import():
+    global scarabaeus
+    import scarabaeus
 
-
-class Test(unittest.TestCase):
-    def test1():
-        unittest.is
+    assert scarabaeus
