@@ -2,3 +2,5 @@
 /dist
 /localtests
 __pychache__/
+.vscode/
+.pytest_cache/
