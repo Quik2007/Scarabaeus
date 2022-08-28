@@ -1,27 +1,27 @@
 import importlib, importlib.util, os
-from typing import Callable, ClassVar, List, Optional, Type
+from typing import Callable, List, Optional, Type
 from types import FunctionType, ModuleType
 
 
 class InvalidPlugin(Exception):
     """Raised when a plugin is not valid, so there is an invalid path or plugin class inside"""
-    def __init__(self, msg:str, plugin:str, plugin_path:str | None=None):
+    def __init__(self, msg: str, plugin: str, plugin_path: str | None = None):
         self.plugin_name = plugin
         self.plugin_path = plugin_path
         super().__init__(msg)
 
-
 class InvalidPluginDirectory(Exception):
     """Raised when the load directory of a PluginType is not valid"""
-    def __init__(self, dir:str):
+    def __init__(self, dir: str):
         self.directory = dir
         super().__init__("The plugin directory '" + dir + "' is not valid.")
 
 class PluginAlreadyLoaded(Exception):
     """Raised when a plugin is already loaded"""
-    def __init__(self, plugin:str):
+    def __init__(self, plugin: str):
         self.plugin_name = plugin
         super().__init__("The plugin '"+plugin+"' is already loaded.")
+
 
 class PluginInfo:
     """Information about a plugin and data it has access to"""
@@ -54,14 +54,18 @@ class PluginInfo:
         self.shared = shared
         self.event_handler = event_handler
 
+
 class Data:
     """Data that is shared between different locations, for example plugins."""
     def __init__(self, **kwargs) -> None:
         self.__dict__ |= kwargs
+
     def __getitem__(self, item):
         return self.__getattribute__(item)
+
     def __setitem__(self, item, value) -> None:
         self.__setattr__(item, value)
+
 
 class Plugin:
     plugin_info: PluginInfo
@@ -138,10 +142,10 @@ class Plugin:
 class PluginType:
     """A type of plugin that can be defined in your application."""
     def __init__(self, name: str,
-        shared_data: Data | dict | List[Data] = {},
-        load_path: Optional[str] = None,
-        event_handler: Optional["EventHandler"]=None,
-    )-> None :
+                shared_data: Data | dict | List[Data] = {},
+                load_path: Optional[str] = None,
+                event_handler: Optional["EventHandler"] = None,
+            )-> None :
         self.name, self.shared, self.load_path = (
             name,
             shared_data,
@@ -150,7 +154,7 @@ class PluginType:
         self.plugins = {}
         self.event_handler = event_handler
 
-    def __validate_plugin__(self, plugin:Plugin | None, name:str, full_path:str | None=None) -> None:
+    def __validate_plugin__(self, plugin: Plugin | None, name: str, full_path: str | None = None) -> None:
         """Validates if a plugin is usable"""
         if not plugin:
             raise InvalidPlugin(
@@ -172,7 +176,7 @@ class PluginType:
                 name,
                 full_path,
             )
-    
+
     def __get_plugin_module__(self, plugin_name: str | None, file_name: str | None, full_path: str | None, module_path: str | None) -> tuple[str, str, ModuleType]:
         """Gets the plugin class to init"""
         # Validating args
@@ -217,9 +221,8 @@ class PluginType:
             spec = importlib.util.spec_from_file_location(plugin_name, full_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-        
-        return file_name, full_path, module
 
+        return file_name, full_path, module
 
     def load(
         self,
@@ -246,10 +249,10 @@ class PluginType:
 
         self.plugins[plugin_name] = plugin()
 
-    def load_all(self, directory=None):
+    def load_all(self, directory = None):
         """Loads all plugins of this type in a given directory or the default load_path of the plugin type"""
         if not directory:
-            directory=self.load_path
+            directory = self.load_path
         if not os.path.exists(directory):
             os.mkdir(directory)
         elif not os.path.isdir(directory):
