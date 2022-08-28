@@ -254,7 +254,7 @@ class PluginType:
             raise TypeError("load() has to have both plugin and plugin_name given.")
         self.__validate_plugin__(plugin, plugin_name, full_path)
         # Plugin setup
-        plugin.__prepare__(plugin, plugin_name, self, self.shared, self.event_handler)
+        plugin.__prepare__(plugin_name, self, self.shared, self.event_handler)
 
         self.plugins[plugin_name] = plugin()
 

@@ -1,9 +1,6 @@
 import os
-from types import FunctionType
-
 import pytest
-from .. import scarabaeus
-
+import scarabaeus
 
 def test_import():
     global scarabaeus
