@@ -1,13 +1,11 @@
-import importlib
-import importlib.util
-import os
-import types
-from typing import Callable, List, Optional
+import importlib, importlib.util, os
+from typing import Callable, ClassVar, List, Optional, Type
+from types import FunctionType, ModuleType
 
 
 class InvalidPlugin(Exception):
     """Raised when a plugin is not valid, so there is an invalid path or plugin class inside"""
-    def __init__(self, msg, plugin, plugin_path):
+    def __init__(self, msg:str, plugin:str, plugin_path:str | None=None):
         self.plugin_name = plugin
         self.plugin_path = plugin_path
         super().__init__(msg)
@@ -15,10 +13,15 @@ class InvalidPlugin(Exception):
 
 class InvalidPluginDirectory(Exception):
     """Raised when the load directory of a PluginType is not valid"""
-    def __init__(self, dir):
+    def __init__(self, dir:str):
         self.directory = dir
         super().__init__("The plugin directory '" + dir + "' is not valid.")
 
+class PluginAlreadyLoaded(Exception):
+    """Raised when a plugin is already loaded"""
+    def __init__(self, plugin:str):
+        self.plugin_name = plugin
+        super().__init__("The plugin '"+plugin+"' is already loaded.")
 
 class PluginInfo:
     """Information about a plugin and data it has access to"""
@@ -52,12 +55,85 @@ class PluginInfo:
         self.event_handler = event_handler
 
 class Data:
+    """Data that is shared between different locations, for example plugins."""
     def __init__(self, **kwargs) -> None:
         self.__dict__ |= kwargs
     def __getitem__(self, item):
         return self.__getattribute__(item)
     def __setitem__(self, item, value) -> None:
         self.__setattr__(item, value)
+
+class Plugin:
+    plugin_info: PluginInfo
+    """This class should not be called directly, use PluginType instead."""
+
+    def __prepare__(
+        cls,
+        file_name: str,
+        plugin_type: "PluginType",
+        shared: dict,
+        event_handler: "EventHandler" = None,
+    ):
+        cls.plugin_info = PluginInfo(cls, file_name, plugin_type, shared, event_handler)
+        if event_handler:
+            # Adding the listeners
+            event_triggered = [
+                attribute
+                for attribute in dir(cls)
+                if callable(getattr(cls, attribute))
+                and attribute.startswith("__") is False
+                and getattr(getattr(cls, attribute), "__event_triggered__", None)
+            ]
+            for method_name in event_triggered:
+                method = getattr(cls, method_name)
+                method.__plugin_listener__ = cls  # The plugin
+                cls.plugin_info.event_handler.__funcs__[method] = method.__events__
+                for event in method.__events__:
+                    if (
+                        not cls.plugin_info.event_handler.allow_unregistered_events
+                        and event not in cls.plugin_info.event_handler.events
+                    ):
+                        raise EventDoesNotExist(event)
+                    try:
+                        cls.plugin_info.event_handler.events[event].append(method)
+                    except KeyError:
+                        cls.plugin_info.event_handler.events[event] = [method]
+        for n in shared:
+            setattr(cls, n, shared[n])
+            print(id(shared[n]))
+        for plugin_name in cls.plugin_info.dependencies:
+            plugin_type.load(plugin_name)
+
+    def __repr__(self):
+        return f"{self.plugin_info.type.name} '{self.plugin_info.human_name}' ({self.plugin_info.name})"
+
+    def require(self, plugin_name):
+        if plugin_name not in self.plugin_info.dependencies:
+            self.plugin_info.type.load(plugin_name=plugin_name)
+            self.plugin_info.dependencies.append(plugin_name)
+
+    # This belongs to the events part
+    @classmethod
+    def event(cls, event_name=None):
+        """A decorator to use events in a plugin subclass"""
+
+        def decorator(fn):
+            if event_name and not isinstance(event_name, FunctionType):
+                _event_name = event_name
+            else:
+                _event_name = fn.__name__
+            fn.__event_triggered__ = True
+            try:
+                fn.__events__.append(_event_name)
+            except AttributeError:
+                fn.__events__ = [_event_name]
+            return fn
+
+        if not isinstance(event_name, FunctionType):
+            return decorator
+        else:
+            return decorator(event_name)
+
 
 class PluginType:
     """A type of plugin that can be defined in your application."""
@@ -74,14 +150,32 @@ class PluginType:
         self.plugins = {}
         self.event_handler = event_handler
 
-    def load(
-        self,
-        plugin_name: Optional[str] = None,
-        file_name: Optional[str] = None,
-        full_path: Optional[str] = None,
-        module_path: Optional[str] = None,
-    ):
-        """Loads a plugin by one of plugin name, file name (in load_path), full path or module path"""
+    def __validate_plugin__(self, plugin:Plugin | None, name:str, full_path:str | None=None) -> None:
+        """Validates if a plugin is usable"""
+        if not plugin:
+            raise InvalidPlugin(
+                "Plugin "
+                + name
+                + " does not contain a class named '"
+                + self.name
+                + "'",
+                name,
+                full_path,
+            )
+        if not issubclass(plugin, Plugin):
+            raise InvalidPlugin(
+                "The class named '"
+                + self.name
+                + "' in the plugin '"
+                + name
+                + "' is not a subclass of Plugin",
+                name,
+                full_path,
+            )
+    
+    def __get_plugin_module__(self, plugin_name: str | None, file_name: str | None, full_path: str | None, module_path: str | None) -> tuple[str, str, ModuleType]:
+        """Gets the plugin class to init"""
+        # Validating args
         if (
             bool(plugin_name) + bool(file_name) + bool(full_path) + bool(module_path)
             != 1
@@ -95,6 +189,7 @@ class PluginType:
                 + str(type(plugin_name or file_name or full_path or module_path))
                 + "'"
             )
+
         # Resolving module path of plugin
         if plugin_name:
             file_name = plugin_name + ".py"
@@ -102,8 +197,10 @@ class PluginType:
             full_path = (self.load_path if self.load_path else "") + file_name
         if full_path and not plugin_name:
             plugin_name = full_path.split("/")[-1][:-3]
+        elif module_path and not plugin_name:
+            plugin_name = module_path.split(".")[-1]
         if plugin_name in self.plugins:
-            return
+            raise PluginAlreadyLoaded(plugin_name)
         if not os.path.isfile(full_path):
             raise InvalidPlugin(
                 "Plugin named '"
@@ -120,28 +217,30 @@ class PluginType:
             spec = importlib.util.spec_from_file_location(plugin_name, full_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-        # Getting & Checking plugin
-        plugin = getattr(module, self.name, None)
+        
+        return file_name, full_path, module
+
+
+    def load(
+        self,
+        plugin_name: Optional[str] = None,
+        file_name: Optional[str] = None,
+        full_path: Optional[str] = None,
+        module_path: Optional[str] = None,
+        module: Optional[ModuleType] = None,
+        plugin: Optional[Type[Plugin]] = None
+    ):
+        """Loads a plugin by one of plugin name, file name (in load_path), full path, module path, module or plugin (class)"""
         if not plugin:
-            raise InvalidPlugin(
-                "Plugin "
-                + plugin_name
-                + " does not contain a class named '"
-                + self.name
-                + "'",
-                plugin_name,
-                full_path,
-            )
-        if not issubclass(plugin, Plugin):
-            raise InvalidPlugin(
-                "The class named '"
-                + self.name
-                + "' in the plugin '"
-                + plugin_name
-                + "' is not a subclass of Plugin",
-                plugin_name,
-                full_path,
-            )
+            if not module:
+                try:
+                    file_name, full_path, module = self.__get_plugin_module__(plugin_name, file_name, full_path, module_path)
+                except PluginAlreadyLoaded:
+                    return
+            plugin = getattr(module, self.name, None)
+        elif not plugin_name:
+            raise TypeError("load() has to have both plugin and plugin_name given.")
+        self.__validate_plugin__(plugin, plugin_name, full_path)
         # Plugin setup
         plugin.__prepare__(plugin, plugin_name, self, self.shared, self.event_handler)
 
@@ -220,7 +319,7 @@ class Plugin:
         """A decorator to use events in a plugin subclass"""
 
         def decorator(fn):
-            if event_name and not isinstance(event_name, types.FunctionType):
+            if event_name and not isinstance(event_name, FunctionType):
                 _event_name = event_name
             else:
                 _event_name = fn.__name__
@@ -231,7 +330,7 @@ class Plugin:
                 fn.__events__ = [_event_name]
             return fn
 
-        if not isinstance(event_name, types.FunctionType):
+        if not isinstance(event_name, FunctionType):
             return decorator
         else:
             return decorator(event_name)

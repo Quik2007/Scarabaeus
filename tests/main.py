@@ -1,5 +1,6 @@
 import os
 import sys
+from types import FunctionType
 
 import pytest
 
@@ -26,3 +27,13 @@ def test_simple_plugins():
         ]
     )
     assert plugin_type.shared["str"] == "Changed string by an addon"
+
+if __name__ == "__main__":
+    def main():
+        tests = []
+        for name, value in globals().items():
+            if name.startswith("test"):
+                tests.append(value)
+        for test in tests:
+            test()
+    main()
