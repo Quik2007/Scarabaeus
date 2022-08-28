@@ -2,11 +2,11 @@ import importlib
 import importlib.util
 import os
 import types
-from ast import Call
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 
 class InvalidPlugin(Exception):
+    """Raised when a plugin is not valid, so there is an invalid path or plugin class inside"""
     def __init__(self, msg, plugin, plugin_path):
         self.plugin_name = plugin
         self.plugin_path = plugin_path
@@ -14,6 +14,7 @@ class InvalidPlugin(Exception):
 
 
 class InvalidPluginDirectory(Exception):
+    """Raised when the load directory of a PluginType is not valid"""
     def __init__(self, dir):
         self.directory = dir
         super().__init__("The plugin directory '" + dir + "' is not valid.")
@@ -52,9 +53,7 @@ class PluginInfo:
 
 
 class PluginType:
-    def __init__(
-        self,
-        name: str,
+    def __init__(self, name: str,
         shared: dict = {},
         load_path: Optional[str] = None,
         event_handler=None,
@@ -193,6 +192,7 @@ class Plugin:
                         cls.plugin_info.event_handler.events[event] = [method]
         for n in shared:
             setattr(cls, n, shared[n])
+            print(id(shared[n]))
         for plugin_name in cls.plugin_info.dependencies:
             plugin_type.load(plugin_name)
 
