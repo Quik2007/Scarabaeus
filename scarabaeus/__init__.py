@@ -29,12 +29,37 @@ class PluginAlreadyLoaded(Exception):
         super().__init__("The plugin '"+plugin+"' is already loaded.")
 
 
+class Data:
+    """A class that represents shared data, for example between plugins."""
+    def __init__(self, name = None, dict: dict = None, **data) -> None:
+        self.__data_name__ = name if name else self.__name__
+        self.__dict__ |= dict if dict else {} | data 
+
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
+
+    def __setitem__(self, item, value) -> None:
+        self.__setattr__(item, value)
+
+def __get_as_data_list__(object):
+    if object == None:
+        return []
+    if isinstance(object, Data):
+        return [object]
+    if isinstance(object, dict):
+        return [Data(name = "data", dict = object)]
+    return object
+
+def __set_data_attributes__(cls, datalist:list[Data]):
+    for data in datalist:
+        setattr(cls, data.__data_name__, data)
+
 class PluginInfo:
     """Information about a plugin and data it has access to"""
 
     name: str
     type: "PluginType"
-    shared: dict
+    shared: list[Data]
     event_handler: list["EventHandler"]
     human_name: Optional[str]
     description: str = ""
@@ -47,7 +72,7 @@ class PluginInfo:
         cls: "Plugin",
         name: str,
         type: "PluginType",
-        shared: dict,
+        shared: list[Data],
         event_handler: Optional["EventHandler"] = None,
     ):
         self.name = name
@@ -60,19 +85,6 @@ class PluginInfo:
         self.shared = shared
         self.event_handler = event_handler if event_handler else []
 
-
-class Data:
-    """Data that is shared between different locations, for example plugins."""
-    def __init__(self, **kwargs) -> None:
-        self.__dict__ |= kwargs
-
-    def __getitem__(self, item):
-        return self.__getattribute__(item)
-
-    def __setitem__(self, item, value) -> None:
-        self.__setattr__(item, value)
-
-
 class Plugin:
     """A plugin of a certain PluginType.
     You should not call this directly, use PluginType instead"""
@@ -83,16 +95,18 @@ class Plugin:
         cls,
         file_name: str,
         plugin_type: "PluginType",
-        shared: dict,
+        shared: list[Data] | Data | dict,
         event_handler: "EventHandler" = None,
     ):
+        # Setting the plugin info TODO give plugin info as parameter
         cls.plugin_info = PluginInfo(cls, file_name, plugin_type, shared, event_handler)
+        
+        # Adding the event listeners
         if event_handler:
-            # Adding the listeners
             event_triggered = [
                 attribute
                 for attribute in dir(cls)
-                if callable(getattr(cls, attribute))
+                if isinstance(getattr(cls, attribute), FunctionType)
                 and attribute.startswith("__") is False
                 and getattr(getattr(cls, attribute), "__event_triggered__", None)
             ]
@@ -110,9 +124,11 @@ class Plugin:
                         cls.plugin_info.event_handler.events[event].append(method)
                     except KeyError:
                         cls.plugin_info.event_handler.events[event] = [method]
-        for name in shared:
-            setattr(cls, name, shared[name])
-            print(id(shared[name]))
+        # Preparing the shared data
+        datalist = __get_as_data_list__(shared)
+        __set_data_attributes__(cls, datalist)
+        
+        # Loading the dependencies
         for plugin_name in cls.plugin_info.dependencies:
             plugin_type.load(plugin_name)
 
@@ -151,15 +167,16 @@ class Plugin:
 class PluginType:
     """A type of plugin that can be defined in your application."""
     def __init__(self, name: str,
-                shared_data: Data | dict | List[Data] = None,
+                shared_data: Data | dict | List[Data | dict] = None,
                 load_path: Optional[str] = None,
                 event_handler: Optional["EventHandler"] = None,
             )-> None :
         self.name, self.shared, self.load_path = (
             name,
-            shared_data if shared_data else [],
+            __get_as_data_list__(shared_data),
             load_path if not load_path or load_path.endswith("/") else load_path + "/",
         )
+        __set_data_attributes__(self, self.shared)
         self.plugins = {}
         self.event_handler = event_handler
 
