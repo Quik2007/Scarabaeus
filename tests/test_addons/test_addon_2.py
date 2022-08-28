@@ -1,4 +1,4 @@
-import sys; sys.path.append("../")
+import sys; sys.path.append("../../")
 import scarabaeus
 
 

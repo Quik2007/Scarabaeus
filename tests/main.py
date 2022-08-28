@@ -1,10 +1,9 @@
 import os
-import sys
 from types import FunctionType
 
 import pytest
+from .. import scarabaeus
 
-sys.path.append("../")
 
 def test_import():
     global scarabaeus
