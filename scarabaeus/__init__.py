@@ -54,13 +54,13 @@ class PluginInfo:
 
 class PluginType:
     def __init__(self, name: str,
-        shared: dict = {},
+        shared_data: dict = {},
         load_path: Optional[str] = None,
-        event_handler=None,
+        event_handler: Optional["EventHandler"]=None,
     ):
         self.name, self.shared, self.load_path = (
             name,
-            shared,
+            shared_data,
             load_path if not load_path or load_path.endswith("/") else load_path + "/",
         )
         self.plugins = {}

@@ -1,6 +1,6 @@
 /Scarabaeus.egg-info
 /dist
 /localtests
-__pychache__/
+__pycache__/
 .vscode/
 .pytest_cache/

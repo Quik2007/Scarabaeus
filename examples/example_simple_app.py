@@ -4,7 +4,7 @@ event_handler = scarabaeus.EventHandler(False)
 event_handler.add("on_simple_event")
 plugin_type = scarabaeus.PluginType(
     "Addon",
-    shared={"a": "Irgendein Text"},
+    shared_data={"a": "Irgendein Text"},
     load_path="plugins",
     event_handler=event_handler,
 )
