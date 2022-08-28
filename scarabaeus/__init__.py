@@ -2,7 +2,7 @@ import importlib
 import importlib.util
 import os
 import types
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 
 class InvalidPlugin(Exception):
@@ -51,13 +51,21 @@ class PluginInfo:
         self.shared = shared
         self.event_handler = event_handler
 
+class Data:
+    def __init__(self, **kwargs) -> None:
+        self.__dict__ |= kwargs
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
+    def __setitem__(self, item, value) -> None:
+        self.__setattr__(item, value)
 
 class PluginType:
+    """A type of plugin that can be defined in your application."""
     def __init__(self, name: str,
-        shared_data: dict = {},
+        shared_data: Data | dict | List[Data] = {},
         load_path: Optional[str] = None,
         event_handler: Optional["EventHandler"]=None,
-    ):
+    )-> None :
         self.name, self.shared, self.load_path = (
             name,
             shared_data,
@@ -73,6 +81,7 @@ class PluginType:
         full_path: Optional[str] = None,
         module_path: Optional[str] = None,
     ):
+        """Loads a plugin by one of plugin name, file name (in load_path), full path or module path"""
         if (
             bool(plugin_name) + bool(file_name) + bool(full_path) + bool(module_path)
             != 1
@@ -136,18 +145,19 @@ class PluginType:
         # Plugin setup
         plugin.__prepare__(plugin, plugin_name, self, self.shared, self.event_handler)
 
-        for n in self.shared:
-            setattr(plugin, n, self.shared[n])
         self.plugins[plugin_name] = plugin()
 
-    def load_all(self):
-        if not os.path.exists(self.load_path):
-            os.mkdir(self.load_path)
-        elif not os.path.isdir(self.load_path):
+    def load_all(self, directory=None):
+        """Loads all plugins of this type in a given directory or the default load_path of the plugin type"""
+        if not directory:
+            directory=self.load_path
+        if not os.path.exists(directory):
+            os.mkdir(directory)
+        elif not os.path.isdir(directory):
             raise
-        for f in os.listdir(self.load_path):
+        for f in os.listdir(directory):
             if (
-                os.path.isfile(self.load_path + "/" + f)
+                os.path.isfile(directory + "/" + f)
                 and len(f) > 3
                 and f[-3:] == ".py"
                 and not f.startswith("__")
