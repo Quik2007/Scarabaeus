@@ -1,4 +1,10 @@
-import importlib, importlib.util, os
+"""
+Scarabaeus
+Plugins and events in Python. Done right.
+"""
+import importlib
+import importlib.util
+import os
 from typing import Callable, List, Optional, Type
 from types import FunctionType, ModuleType
 
@@ -12,9 +18,9 @@ class InvalidPlugin(Exception):
 
 class InvalidPluginDirectory(Exception):
     """Raised when the load directory of a PluginType is not valid"""
-    def __init__(self, dir: str):
-        self.directory = dir
-        super().__init__("The plugin directory '" + dir + "' is not valid.")
+    def __init__(self, directory: str):
+        self.directory = directory
+        super().__init__("The plugin directory '" + directory + "' is not valid.")
 
 class PluginAlreadyLoaded(Exception):
     """Raised when a plugin is already loaded"""
@@ -42,7 +48,7 @@ class PluginInfo:
         name: str,
         type: "PluginType",
         shared: dict,
-        event_handler: Optional["EventHandler"] = [],
+        event_handler: Optional["EventHandler"] = None,
     ):
         self.name = name
         self.human_name = cls.human_name if hasattr(cls, "human_name") else self.name
@@ -52,7 +58,7 @@ class PluginInfo:
         self.dependencies = cls.dependencies if hasattr(cls, "dependencies") else []
         self.type = type
         self.shared = shared
-        self.event_handler = event_handler
+        self.event_handler = event_handler if event_handler else []
 
 
 class Data:
@@ -68,9 +74,11 @@ class Data:
 
 
 class Plugin:
+    """A plugin of a certain PluginType.
+    You should not call this directly, use PluginType instead"""
     plugin_info: PluginInfo
-    """This class should not be called directly, use PluginType instead."""
 
+    @classmethod
     def __prepare__(
         cls,
         file_name: str,
@@ -102,9 +110,9 @@ class Plugin:
                         cls.plugin_info.event_handler.events[event].append(method)
                     except KeyError:
                         cls.plugin_info.event_handler.events[event] = [method]
-        for n in shared:
-            setattr(cls, n, shared[n])
-            print(id(shared[n]))
+        for name in shared:
+            setattr(cls, name, shared[name])
+            print(id(shared[name]))
         for plugin_name in cls.plugin_info.dependencies:
             plugin_type.load(plugin_name)
 
@@ -112,6 +120,7 @@ class Plugin:
         return f"{self.plugin_info.type.name} '{self.plugin_info.human_name}' ({self.plugin_info.name})"
 
     def require(self, plugin_name):
+        """Declares a plugin as a dependency and loads it eventually"""
         if plugin_name not in self.plugin_info.dependencies:
             self.plugin_info.type.load(plugin_name=plugin_name)
             self.plugin_info.dependencies.append(plugin_name)
@@ -121,17 +130,17 @@ class Plugin:
     def event(cls, event_name=None):
         """A decorator to use events in a plugin subclass"""
 
-        def decorator(fn):
+        def decorator(func):
             if event_name and not isinstance(event_name, FunctionType):
                 _event_name = event_name
             else:
-                _event_name = fn.__name__
-            fn.__event_triggered__ = True
+                _event_name = func.__name__
+            func.__event_triggered__ = True
             try:
-                fn.__events__.append(_event_name)
+                func.__events__.append(_event_name)
             except AttributeError:
-                fn.__events__ = [_event_name]
-            return fn
+                func.__events__ = [_event_name]
+            return func
 
         if not isinstance(event_name, FunctionType):
             return decorator
@@ -142,13 +151,13 @@ class Plugin:
 class PluginType:
     """A type of plugin that can be defined in your application."""
     def __init__(self, name: str,
-                shared_data: Data | dict | List[Data] = {},
+                shared_data: Data | dict | List[Data] = None,
                 load_path: Optional[str] = None,
                 event_handler: Optional["EventHandler"] = None,
             )-> None :
         self.name, self.shared, self.load_path = (
             name,
-            shared_data,
+            shared_data if shared_data else [],
             load_path if not load_path or load_path.endswith("/") else load_path + "/",
         )
         self.plugins = {}
@@ -256,87 +265,15 @@ class PluginType:
         if not os.path.exists(directory):
             os.mkdir(directory)
         elif not os.path.isdir(directory):
-            raise
-        for f in os.listdir(directory):
+            raise InvalidPluginDirectory(directory)
+        for file in os.listdir(directory):
             if (
-                os.path.isfile(directory + "/" + f)
-                and len(f) > 3
-                and f[-3:] == ".py"
-                and not f.startswith("__")
+                os.path.isfile(directory + "/" + file)
+                and len(file) > 3
+                and file[-3:] == ".py"
+                and not file.startswith("__")
             ):
-                self.load(file_name=f)
-
-
-class Plugin:
-    plugin_info: PluginInfo
-    """This class should not be called directly, use PluginType instead."""
-
-    def __prepare__(
-        cls,
-        file_name: str,
-        plugin_type: PluginType,
-        shared: dict,
-        event_handler: "EventHandler" = None,
-    ):
-        cls.plugin_info = PluginInfo(cls, file_name, plugin_type, shared, event_handler)
-        if event_handler:
-            # Adding the listeners
-            event_triggered = [
-                attribute
-                for attribute in dir(cls)
-                if callable(getattr(cls, attribute))
-                and attribute.startswith("__") is False
-                and getattr(getattr(cls, attribute), "__event_triggered__", None)
-            ]
-            for method_name in event_triggered:
-                method = getattr(cls, method_name)
-                method.__plugin_listener__ = cls  # The plugin
-                cls.plugin_info.event_handler.__funcs__[method] = method.__events__
-                for event in method.__events__:
-                    if (
-                        not cls.plugin_info.event_handler.allow_unregistered_events
-                        and event not in cls.plugin_info.event_handler.events
-                    ):
-                        raise EventDoesNotExist(event)
-                    try:
-                        cls.plugin_info.event_handler.events[event].append(method)
-                    except KeyError:
-                        cls.plugin_info.event_handler.events[event] = [method]
-        for n in shared:
-            setattr(cls, n, shared[n])
-            print(id(shared[n]))
-        for plugin_name in cls.plugin_info.dependencies:
-            plugin_type.load(plugin_name)
-
-    def __repr__(self):
-        return f"{self.plugin_info.type.name} '{self.plugin_info.human_name}' ({self.plugin_info.name})"
-
-    def require(self, plugin_name):
-        if plugin_name not in self.plugin_info.dependencies:
-            self.plugin_info.type.load(plugin_name=plugin_name)
-            self.plugin_info.dependencies.append(plugin_name)
-
-    # This belongs to the events part
-    @classmethod
-    def event(cls, event_name=None):
-        """A decorator to use events in a plugin subclass"""
-
-        def decorator(fn):
-            if event_name and not isinstance(event_name, FunctionType):
-                _event_name = event_name
-            else:
-                _event_name = fn.__name__
-            fn.__event_triggered__ = True
-            try:
-                fn.__events__.append(_event_name)
-            except AttributeError:
-                fn.__events__ = [_event_name]
-            return fn
-
-        if not isinstance(event_name, FunctionType):
-            return decorator
-        else:
-            return decorator(event_name)
+                self.load(file_name=file)
 
 
 #
@@ -346,27 +283,32 @@ class Plugin:
 
 
 class EventAlreadyExists(Exception):
+    """Raised when an event already exists."""
     def __init__(self, event_name):
         self.event_name = event_name
         super().__init__("'" + event_name + "' already exists.")
 
 
 class EventDoesNotExist(Exception):
+    """Raised when an event does not exist and allow_unregistered_events is not enabled."""
     def __init__(self, event_name):
         self.event_name = event_name
         super().__init__("'" + event_name + "' does not exist.")
 
 
 class EventHandler:
-    def __init__(self, allow_unregistered_events: bool, events: list = []):
+    """The class to use when interacting with events, adding or removing or listening to them."""
+    def __init__(self, allow_unregistered_events: bool, events: list = None):
         self.allow_unregistered_events = allow_unregistered_events
         self.events = {}
-        for event in events:
-            self.events[event] = []
+        if events:
+            for event in events:
+                self.events[event] = []
         self.__funcs__ = {}
         self.__plugin_types__ = []
 
     def add(self, *event_names: str):
+        """Adds an event to this event handler. Only needen when allow_unregistered events is False."""
         for event_name in event_names:
             if not isinstance(event_name, str):
                 raise TypeError("event_name has to be a str")
@@ -375,6 +317,7 @@ class EventHandler:
             self.events[event_name] = []
 
     def call(self, event_name: str, *args, **kwargs):
+        """Calls an event with the given name and arguments for listening functions."""
         if not isinstance(event_name, str):
             raise TypeError("event_name has to be a str")
         if not self.allow_unregistered_events and event_name not in self.events:
@@ -423,6 +366,7 @@ class EventHandler:
             self.events[event].remove(func)
 
     def event(self, event_name=None):
+        """A decorator that is used to listen to events."""
         def decorator(func):
             self.add_listener(func, event_name)
 
