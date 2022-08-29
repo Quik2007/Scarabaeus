@@ -11,19 +11,24 @@ from types import FunctionType, ModuleType
 
 class InvalidPlugin(Exception):
     """Raised when a plugin is not valid, so there is an invalid path or plugin class inside"""
+
     def __init__(self, msg: str, plugin: str, plugin_path: str | None = None):
         self.plugin_name = plugin
         self.plugin_path = plugin_path
         super().__init__(msg)
 
+
 class InvalidPluginDirectory(Exception):
     """Raised when the load directory of a PluginType is not valid"""
+
     def __init__(self, directory: str):
         self.directory = directory
         super().__init__("The plugin directory '" + directory + "' is not valid.")
 
+
 class PluginAlreadyLoaded(Exception):
     """Raised when a plugin is already loaded"""
+
     def __init__(self, plugin: str):
         self.plugin_name = plugin
         super().__init__("The plugin '"+plugin+"' is already loaded.")
@@ -31,9 +36,10 @@ class PluginAlreadyLoaded(Exception):
 
 class Data:
     """A class that represents shared data, for example between plugins."""
-    def __init__(self, name = None, dict: dict = None, **data) -> None:
-        self.__data_name__ = name if name else self.__name__
-        self.__dict__ |= dict if dict else {} | data 
+
+    def __init__(self, name="data", dict: dict = None, **data) -> None:
+        self.__data_name__ = name
+        self.__dict__ |= dict if dict else {} | data
 
     def __getitem__(self, item):
         return self.__getattribute__(item)
@@ -41,18 +47,21 @@ class Data:
     def __setitem__(self, item, value) -> None:
         self.__setattr__(item, value)
 
-def __get_as_data_list__(object: Data | dict | list[Data] | dict[str, dict]) -> list:
-    if object == None:
-        return []
-    if isinstance(object, Data):
-        return [object]
-    if isinstance(object, dict):
-        return [Data(name = "data", dict = object)]
-    return object
 
-def __set_data_attributes__(cls, datalist:list[Data]):
+def __get_as_data_list__(_object: Data | dict | list[Data] | dict[str, dict]) -> list:
+    if _object is None:
+        return []
+    if isinstance(_object, Data):
+        return [_object]
+    if isinstance(_object, dict):
+        return [Data(name="data", dict=_object)]
+    return _object
+
+
+def __set_data_attributes__(cls, datalist: list[Data]):
     for data in datalist:
         setattr(cls, data.__data_name__, data)
+
 
 class PluginInfo:
     """Information about a plugin and data it has access to"""
@@ -76,14 +85,18 @@ class PluginInfo:
         event_handler: Optional["EventHandler"] = None,
     ):
         self.name = name
-        self.human_name = cls.human_name if hasattr(cls, "human_name") else self.name
-        self.description = cls.description if hasattr(cls, "description") else ""
+        self.human_name = cls.human_name if hasattr(
+            cls, "human_name") else self.name
+        self.description = cls.description if hasattr(
+            cls, "description") else ""
         self.author = cls.author if hasattr(cls, "author") else ""
         self.version = cls.version if hasattr(cls, "version") else ""
-        self.dependencies = cls.dependencies if hasattr(cls, "dependencies") else []
+        self.dependencies = cls.dependencies if hasattr(
+            cls, "dependencies") else []
         self.type = type
         self.shared = shared
         self.event_handler = event_handler if event_handler else []
+
 
 class Plugin:
     """A plugin of a certain PluginType.
@@ -99,8 +112,9 @@ class Plugin:
         event_handler: "EventHandler" = None,
     ):
         # Setting the plugin info TODO give plugin info as parameter
-        cls.plugin_info = PluginInfo(cls, file_name, plugin_type, shared, event_handler)
-        
+        cls.plugin_info = PluginInfo(
+            cls, file_name, plugin_type, shared, event_handler)
+
         # Adding the event listeners
         if event_handler:
             event_triggered = [
@@ -113,7 +127,8 @@ class Plugin:
             for method_name in event_triggered:
                 method = getattr(cls, method_name)
                 method.__plugin_listener__ = cls  # The plugin
-                cls.plugin_info.event_handler.__funcs__[method] = method.__events__
+                cls.plugin_info.event_handler.__funcs__[
+                    method] = method.__events__
                 for event in method.__events__:
                     if (
                         not cls.plugin_info.event_handler.allow_unregistered_events
@@ -121,13 +136,14 @@ class Plugin:
                     ):
                         raise EventDoesNotExist(event)
                     try:
-                        cls.plugin_info.event_handler.events[event].append(method)
+                        cls.plugin_info.event_handler.events[event].append(
+                            method)
                     except KeyError:
                         cls.plugin_info.event_handler.events[event] = [method]
         # Preparing the shared data
         datalist = __get_as_data_list__(shared)
         __set_data_attributes__(cls, datalist)
-        
+
         # Loading the dependencies
         for plugin_name in cls.plugin_info.dependencies:
             plugin_type.load(plugin_name)
@@ -166,15 +182,17 @@ class Plugin:
 
 class PluginType:
     """A type of plugin that can be defined in your application."""
+
     def __init__(self, name: str,
-                shared_data: Data | dict | List[Data | dict] = None,
-                load_path: Optional[str] = None,
-                event_handler: Optional["EventHandler"] = None,
-            )-> None :
+                 shared_data: Data | dict | List[Data | dict] = None,
+                 load_path: Optional[str] = None,
+                 event_handler: Optional["EventHandler"] = None,
+                 ) -> None:
         self.name, self.shared, self.load_path = (
             name,
             __get_as_data_list__(shared_data),
-            load_path if not load_path or load_path.endswith("/") else load_path + "/",
+            load_path if not load_path or load_path.endswith(
+                "/") else load_path + "/",
         )
         __set_data_attributes__(self, self.shared)
         self.plugins = {}
@@ -207,7 +225,8 @@ class PluginType:
         """Gets the plugin class to init"""
         # Validating args
         if (
-            bool(plugin_name) + bool(file_name) + bool(full_path) + bool(module_path)
+            bool(plugin_name) + bool(file_name) +
+            bool(full_path) + bool(module_path)
             != 1
         ):
             raise TypeError(
@@ -244,7 +263,8 @@ class PluginType:
         if module_path:
             module = importlib.import_module(module_path)
         else:
-            spec = importlib.util.spec_from_file_location(plugin_name, full_path)
+            spec = importlib.util.spec_from_file_location(
+                plugin_name, full_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
@@ -263,19 +283,21 @@ class PluginType:
         if not plugin:
             if not module:
                 try:
-                    file_name, full_path, module = self.__get_plugin_module__(plugin_name, file_name, full_path, module_path)
+                    file_name, full_path, module = self.__get_plugin_module__(
+                        plugin_name, file_name, full_path, module_path)
                 except PluginAlreadyLoaded:
                     return
             plugin = getattr(module, self.name, None)
         elif not plugin_name:
-            raise TypeError("load() has to have both plugin and plugin_name given.")
+            raise TypeError(
+                "load() has to have both plugin and plugin_name given.")
         self.__validate_plugin__(plugin, plugin_name, full_path)
         # Plugin setup
         plugin.__prepare__(plugin_name, self, self.shared, self.event_handler)
 
         self.plugins[plugin_name] = plugin()
 
-    def load_all(self, directory = None):
+    def load_all(self, directory=None):
         """Loads all plugins of this type in a given directory or the default load_path of the plugin type"""
         if not directory:
             directory = self.load_path
@@ -301,6 +323,7 @@ class PluginType:
 
 class EventAlreadyExists(Exception):
     """Raised when an event already exists."""
+
     def __init__(self, event_name):
         self.event_name = event_name
         super().__init__("'" + event_name + "' already exists.")
@@ -308,6 +331,7 @@ class EventAlreadyExists(Exception):
 
 class EventDoesNotExist(Exception):
     """Raised when an event does not exist and allow_unregistered_events is not enabled."""
+
     def __init__(self, event_name):
         self.event_name = event_name
         super().__init__("'" + event_name + "' does not exist.")
@@ -315,6 +339,7 @@ class EventDoesNotExist(Exception):
 
 class EventHandler:
     """The class to use when interacting with events, adding or removing or listening to them."""
+
     def __init__(self, allow_unregistered_events: bool, events: list = None):
         self.allow_unregistered_events = allow_unregistered_events
         self.events = {}
