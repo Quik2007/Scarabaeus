@@ -41,7 +41,7 @@ class Data:
     def __setitem__(self, item, value) -> None:
         self.__setattr__(item, value)
 
-def __get_as_data_list__(object):
+def __get_as_data_list__(object: Data | dict | list[Data] | dict[str, dict]) -> list:
     if object == None:
         return []
     if isinstance(object, Data):
